@@ -1,6 +1,8 @@
 module Main exposing (..)
 
 import Html exposing (..)
+import Html.Events exposing (onClick)
+import Http exposing (Request, get)
 import Json.Decode exposing (Decoder, decodeString, list, string)
 import Json.Decode.Pipeline exposing (decode, required)
 
@@ -20,13 +22,14 @@ main =
 
 
 type alias Model =
-    { name : String
+    { poems : List Poem
+    , error : String
     }
 
 
 initModel : Model
 initModel =
-    Model ""
+    Model [] ""
 
 
 init : ( Model, Cmd Msg )
@@ -41,12 +44,33 @@ init =
 
 
 type Msg
-    = NoOp
+    = GetPoems
+    | GotPoems (List Poem)
+    | ShowError String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        GetPoems ->
+            model
+                ! [ Http.send
+                        (\res ->
+                            case res of
+                                Ok poems ->
+                                    GotPoems poems
+
+                                Err httpErr ->
+                                    ShowError (toString httpErr)
+                        )
+                        poemRequest
+                  ]
+
+        GotPoems poems ->
+            { model | poems = poems } ! []
+
+        ShowError error ->
+            { model | error = error } ! []
 
 
 type alias Poem =
@@ -56,20 +80,13 @@ type alias Poem =
     }
 
 
-sample : String
-sample =
-    """
-{
- "title": "Not at home to callers",
- "author": "Emily Dickinson",
- "lines": [
-      "Not at Home to Callers",
-      "Says the Naked Tree --",
-      "Bonnet due in April --",
-      "Wishing you Good Day --"
- ]
-}
-"""
+
+-- HTTP
+
+
+poemRequest : Request (List Poem)
+poemRequest =
+    Http.get "http://localhost:4000/api/poems" (list poemDecoder)
 
 
 poemDecoder : Decoder Poem
@@ -99,23 +116,23 @@ lines l =
     List.foldl (\a b -> b ++ [ p [] [ text a ] ]) [] l
 
 
-poem : Result String Poem -> List (Html Msg)
-poem p =
-    case p of
-        Ok poem ->
-            [ h2 [] [ text <| (++) "Title: " poem.title ], h3 [] [ text <| (++) "Author: " poem.author ], h4 [] (lines poem.lines) ]
+showPoem : Poem -> List (Html Msg)
+showPoem poem =
+    [ h2 [] [ text <| (++) "Title: " poem.title ], h3 [] [ text <| (++) "Author: " poem.author ], h4 [] (lines poem.lines) ]
 
-        Err error ->
-            [ span [] [ text error ] ]
+
+showPoems poems =
+    case poems of
+        [] ->
+            [ h2 [] [ text "Click to load a poem" ] ]
+
+        _ ->
+            List.foldl (\a b -> b ++ (showPoem a)) [] poems
 
 
 view : Model -> Html Msg
 view model =
-    let
-        decodedPoem =
-            decodeString poemDecoder sample
-    in
-        div [] (poem decodedPoem)
+    div [] ((showPoems model.poems) ++ ([ button [ onClick GetPoems ] [ text "Load Poems" ] ]))
 
 
 
