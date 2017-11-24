@@ -2,6 +2,7 @@ module Main exposing (..)
 
 import Char
 import Html exposing (..)
+import Html.Attributes exposing (class, disabled)
 import Html.Events exposing (onClick)
 import Http exposing (Request, get)
 import Json.Decode exposing (Decoder, decodeString, list, string)
@@ -26,13 +27,14 @@ main =
 type alias Model =
     { poems : List Poem
     , error : String
+    , isEncrypted : Bool
     , selectedIndex : Int
     }
 
 
 initModel : Model
 initModel =
-    Model [] "" 0
+    Model [] "" False 0
 
 
 init : ( Model, Cmd Msg )
@@ -47,9 +49,11 @@ init =
 
 
 type Msg
-    = GetPoems
+    = DecryptPeom (Maybe Poem)
+    | EncryptPeom (Maybe Poem)
+    | GetPoems
     | GotPoems (List Poem)
-    | GetRandomIndex
+    | GetRandomIndex (Maybe Poem)
     | SetSelectedIndex Int
     | ShowError String
 
@@ -71,12 +75,74 @@ getPoemsCmd =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        DecryptPeom maybePoem ->
+            case maybePoem of
+                Nothing ->
+                    model ! []
+
+                Just poem ->
+                    { model
+                        | isEncrypted = False
+                        , poems =
+                            (List.map
+                                (\p ->
+                                    if p.title == poem.title then
+                                        { p | title = (caesarCipher False p.title), author = (caesarCipher False p.author), lines = List.map (caesarCipher False) p.lines }
+                                    else
+                                        p
+                                )
+                                model.poems
+                            )
+                    }
+                        ! []
+
+        EncryptPeom maybePoem ->
+            case maybePoem of
+                Nothing ->
+                    model ! []
+
+                Just poem ->
+                    { model
+                        | isEncrypted = True
+                        , poems =
+                            (List.map
+                                (\p ->
+                                    if p.title == poem.title then
+                                        { p | title = (caesarCipher True p.title), author = (caesarCipher True p.author), lines = List.map (caesarCipher True) p.lines }
+                                    else
+                                        p
+                                )
+                                model.poems
+                            )
+                    }
+                        ! []
+
         GetPoems ->
             model
                 ! [ getPoemsCmd ]
 
-        GetRandomIndex ->
-            model ! [ Random.generate SetSelectedIndex (Random.int 0 (List.length model.poems - 1)) ]
+        GetRandomIndex maybePoem ->
+            let
+                ps =
+                    case maybePoem of
+                        Nothing ->
+                            model.poems
+
+                        Just poem ->
+                            if model.isEncrypted then
+                                (List.map
+                                    (\p ->
+                                        if p.title == poem.title then
+                                            { p | title = (caesarCipher False p.title), author = (caesarCipher False p.author), lines = List.map (caesarCipher False) p.lines }
+                                        else
+                                            p
+                                    )
+                                    model.poems
+                                )
+                            else
+                                model.poems
+            in
+                { model | poems = ps, isEncrypted = False } ! [ Random.generate SetSelectedIndex (Random.int 0 (List.length model.poems - 1)) ]
 
         GotPoems poems ->
             { model | poems = poems }
@@ -113,9 +179,23 @@ poemDecoder =
         |> required "lines" (list string)
 
 
-caesarCipher : Int -> String -> String
-caesarCipher offset input =
-    String.foldr (\a b -> String.cons (caeserCipherChar a offset) b) "" input
+cipherFolder : Bool -> Char -> (String -> String)
+cipherFolder encrypt a b =
+    let
+        offset =
+            case encrypt of
+                True ->
+                    1
+
+                False ->
+                    -1
+    in
+        String.cons (caeserCipherChar a offset) b
+
+
+caesarCipher : Bool -> String -> String
+caesarCipher bool string =
+    String.foldr (cipherFolder bool) "" string
 
 
 caeserCipherChar : Char -> Int -> Char
@@ -134,11 +214,6 @@ caeserCipherChar input offset =
 
 
 
--- toCode converts char to int
--- A is 65
--- Z is 90
--- a is
--- |> required "author" string
 -- SUBSCRIPTIONS
 
 
@@ -151,44 +226,47 @@ subscriptions model =
 -- VIEW
 
 
-lines : (String -> String) -> List String -> List (Html Msg)
-lines cipher l =
-    List.foldl (\a b -> b ++ [ p [] [ text (cipher a) ] ]) [] l
+lines : List String -> List (Html Msg)
+lines l =
+    List.foldl (\a b -> b ++ [ p [] [ text a ] ]) [] l
 
 
-showPoem : Poem -> List (Html Msg)
-showPoem poem =
-    let
-        cipher =
-            caesarCipher 1
-    in
-        [ h2 [] [ text (((++) "Title: " poem.title)) ], h3 [] [ text (((++) "Author: " poem.author)) ], h4 [] (lines (\a -> a) poem.lines) ]
+encryptPoem : Poem -> Poem
+encryptPoem poem =
+    { poem | title = caesarCipher True poem.title, author = caesarCipher True poem.author, lines = [] }
 
 
-showPoems : List Poem -> Int -> List (Html Msg)
-showPoems poems index =
-    let
-        ps =
-            List.head (List.drop index poems)
-    in
-        case ps of
-            Nothing ->
-                [ h2 [] [ text "Click to load a poem" ] ]
+decryptPoem : Poem -> Poem
+decryptPoem poem =
+    { poem | title = caesarCipher False poem.title, author = caesarCipher False poem.author, lines = [] }
 
-            Just poem ->
-                showPoem poem
+
+showPoem : Maybe Poem -> List (Html Msg)
+showPoem maybePoem =
+    case maybePoem of
+        Nothing ->
+            [ h2 [] [ text "Click to load a poem" ] ]
+
+        Just poem ->
+            [ h2 [] [ text poem.title ], h3 [] [ text poem.author ], blockquote [] (lines poem.lines) ]
 
 
 view : Model -> Html Msg
 view model =
     let
-        poems =
-            showPoems model.poems model.selectedIndex
+        maybePoem =
+            (List.head (List.drop model.selectedIndex model.poems))
 
         getPoemsButton =
             ([ button [ onClick GetPoems ] [ text "Load Poems" ] ])
 
         getRandomPoemButton =
-            ([ button [ onClick GetRandomIndex ] [ text "Get Random Poem" ] ])
+            ([ div [] [ button [ onClick (GetRandomIndex maybePoem) ] [ text "Get Random Poem" ] ] ])
+
+        encryptPoemButton =
+            ([ div [] [ button [ disabled (model.isEncrypted), onClick (EncryptPeom maybePoem) ] [ text "Encrypt Poem" ] ] ])
+
+        decryptPoemButton =
+            ([ div [] [ button [ disabled (not model.isEncrypted), onClick (DecryptPeom maybePoem) ] [ text "Decrypt Poem" ] ] ])
     in
-        div [] (poems ++ getRandomPoemButton)
+        div [ class "container application-container" ] ((showPoem maybePoem) ++ getRandomPoemButton ++ encryptPoemButton ++ decryptPoemButton)
