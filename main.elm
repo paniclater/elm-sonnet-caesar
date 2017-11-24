@@ -87,7 +87,7 @@ update msg model =
                             (List.map
                                 (\p ->
                                     if p.title == poem.title then
-                                        { p | title = (caesarCipher False p.title), author = (caesarCipher False p.author), lines = List.map (caesarCipher False) p.lines }
+                                        decryptPoem p
                                     else
                                         p
                                 )
@@ -108,7 +108,7 @@ update msg model =
                             (List.map
                                 (\p ->
                                     if p.title == poem.title then
-                                        { p | title = (caesarCipher True p.title), author = (caesarCipher True p.author), lines = List.map (caesarCipher True) p.lines }
+                                        encryptPoem p
                                     else
                                         p
                                 )
@@ -133,7 +133,7 @@ update msg model =
                                 (List.map
                                     (\p ->
                                         if p.title == poem.title then
-                                            { p | title = (caesarCipher False p.title), author = (caesarCipher False p.author), lines = List.map (caesarCipher False) p.lines }
+                                            decryptPoem p
                                         else
                                             p
                                     )
@@ -233,12 +233,12 @@ lines l =
 
 encryptPoem : Poem -> Poem
 encryptPoem poem =
-    { poem | title = caesarCipher True poem.title, author = caesarCipher True poem.author, lines = [] }
+    { poem | title = caesarCipher True poem.title, author = caesarCipher True poem.author, lines = (List.map (caesarCipher True) poem.lines) }
 
 
 decryptPoem : Poem -> Poem
 decryptPoem poem =
-    { poem | title = caesarCipher False poem.title, author = caesarCipher False poem.author, lines = [] }
+    { poem | title = caesarCipher False poem.title, author = caesarCipher False poem.author, lines = (List.map (caesarCipher False) poem.lines) }
 
 
 showPoem : Maybe Poem -> List (Html Msg)
