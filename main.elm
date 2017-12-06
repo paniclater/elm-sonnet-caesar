@@ -26,6 +26,7 @@ main =
 
 type alias Model =
     { poems : List Poem
+    , tweets : List Tweet
     , error : String
     , isEncrypted : Bool
     , selectedIndex : Int
@@ -34,14 +35,12 @@ type alias Model =
 
 initModel : Model
 initModel =
-    Model [] "" False 0
+    Model [] [] "" False 0
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( initModel
-    , getPoemsCmd
-    )
+    initModel ! [ getTweetsCmd, getPoemsCmd ]
 
 
 
@@ -51,11 +50,27 @@ init =
 type Msg
     = DecryptPeom (Maybe Poem)
     | EncryptPeom (Maybe Poem)
+    | GetTweets
+    | GotTweets (List Tweet)
     | GetPoems
     | GotPoems (List Poem)
     | GetRandomIndex (Maybe Poem)
     | SetSelectedIndex Int
     | ShowError String
+
+
+getTweetsCmd : Cmd Msg
+getTweetsCmd =
+    Http.send
+        (\res ->
+            case res of
+                Ok tweets ->
+                    GotTweets tweets
+
+                Err httpErr ->
+                    ShowError (toString httpErr)
+        )
+        tweetRequest
 
 
 getPoemsCmd : Cmd Msg
@@ -117,6 +132,13 @@ update msg model =
                     }
                         ! []
 
+        GetTweets ->
+            model
+                ! [ getTweetsCmd ]
+
+        GotTweets tweets ->
+            { model | tweets = tweets } ! []
+
         GetPoems ->
             model
                 ! [ getPoemsCmd ]
@@ -162,8 +184,26 @@ type alias Poem =
     }
 
 
+type alias Tweet =
+    { text : String
+    , userName : String
+    }
+
+
 
 -- HTTP
+
+
+tweetRequest : Request (List Tweet)
+tweetRequest =
+    Http.get "http://localhost:4000/api/tweets" (list tweetDecoder)
+
+
+tweetDecoder : Decoder Tweet
+tweetDecoder =
+    decode Tweet
+        |> required "text" string
+        |> required "user_name" string
 
 
 poemRequest : Request (List Poem)
@@ -179,15 +219,19 @@ poemDecoder =
         |> required "lines" (list string)
 
 
+
+-- Cipher Utils
+
+
 cipherFolder : Bool -> Char -> (String -> String)
-cipherFolder encrypt a b =
+cipherFolder isEncrypted a b =
     let
         offset =
-            case encrypt of
-                True ->
+            case isEncrypted of
+                False ->
                     1
 
-                False ->
+                True ->
                     -1
     in
         String.cons (caeserCipherChar a offset) b
@@ -233,22 +277,22 @@ lines l =
 
 encryptPoem : Poem -> Poem
 encryptPoem poem =
-    { poem | title = caesarCipher True poem.title, author = caesarCipher True poem.author, lines = (List.map (caesarCipher True) poem.lines) }
+    { poem | title = caesarCipher False poem.title, author = caesarCipher True poem.author, lines = (List.map (caesarCipher True) poem.lines) }
 
 
 decryptPoem : Poem -> Poem
 decryptPoem poem =
-    { poem | title = caesarCipher False poem.title, author = caesarCipher False poem.author, lines = (List.map (caesarCipher False) poem.lines) }
+    { poem | title = caesarCipher True poem.title, author = caesarCipher False poem.author, lines = (List.map (caesarCipher False) poem.lines) }
 
 
 showPoem : Maybe Poem -> List (Html Msg)
 showPoem maybePoem =
     case maybePoem of
         Nothing ->
-            [ h2 [] [ text "Click to load a poem" ] ]
+            [ h4 [] [ text "Click to load a poem" ] ]
 
         Just poem ->
-            [ h2 [] [ text poem.title ], h3 [] [ text poem.author ], blockquote [] (lines poem.lines) ]
+            [ h4 [] [ text poem.title ], h5 [] [ text poem.author ], blockquote [] (lines poem.lines) ]
 
 
 view : Model -> Html Msg
@@ -269,4 +313,21 @@ view model =
         decryptPoemButton =
             ([ div [] [ button [ disabled (not model.isEncrypted), onClick (DecryptPeom maybePoem) ] [ text "Decrypt Poem" ] ] ])
     in
-        div [ class "container application-container" ] ((showPoem maybePoem) ++ getRandomPoemButton ++ encryptPoemButton ++ decryptPoemButton)
+        div []
+            [ header [ class "header" ] [ h1 [] [ text "Sonnet Caesar" ] ]
+            , div
+                [ class "container application-container" ]
+                [ div [ class "row" ]
+                    [ div [ class "column column-40 poem-column" ]
+                        [ div [ class "main-column" ] ((showPoem maybePoem) ++ getRandomPoemButton ++ encryptPoemButton ++ decryptPoemButton)
+                        ]
+                    , div [ class "column column-60" ]
+                        [ div [ class "main-column" ]
+                            [ h3 [] [ text "Tweets" ]
+                            , div [] (List.map (\t -> div [ class "tweet" ] [ h5 [] [ text t.userName ], p [] [ text t.text ] ]) model.tweets)
+                            , div [] [ button [ onClick GetTweets ] [ text "Get Tweets" ] ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]

@@ -1,17 +1,57 @@
+body {
+  color: #52534C;
+  width: 100%;
+}
 p {
   margin-bottom: .5rem;
 }
 
 h1, h2, h3, h4 {
-  /*text-align: center;*/
+  word-wrap: break-word;
+}
+
+.container {
+  padding: 0;
+  max-width: 100%;
+}
+.main-column {
+  padding: 2rem;
+}
+.poem-column {
+  background-color: #52534C;
+  color: white;
+}
+
+.header {
+  background-color: #F7199E;
+  color: white;
+  width: 100%;
+  padding: 2rem;
+}
+
+.tweet {
+  margin: 2rem 0;
+  border-bottom: solid 0.3rem #F7199E;
+}
+
+button {
+  color: #52534C;
+  background-color: #D3F819;
+  border-color: #D3F819;
+}
+
+button:hover {
+  color: D3F819;
+  background-color: #52534;
+  border-color: #52534;
+}
+
+button[disabled]:hover {
+  color: #52534C;
+  background-color: #D3F819;
+  border-color: #D3F819;
 }
 
 blockquote {
-  width: 800px;
-  margin: 4rem auto;
-}
-
-.application-container {
-  width: 800px;
-  margin: auto;
+  border-left: 0.3rem solid #F7199E;
 }
